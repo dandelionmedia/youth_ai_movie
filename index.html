@@ -39,6 +39,22 @@
 .brand-logo-link{flex-shrink:1}
 .brand-info.brand-home{display:block}
 .brand-home:focus-visible{outline:3px solid var(--gold);outline-offset:4px}
+
+/* immersive landscape slideshow with unobtrusive navigation */
+.lightbox{height:100dvh;height:100svh;overflow:hidden}
+.lightbox-stage{overflow:hidden;touch-action:none;isolation:isolate;padding:0;flex:1}
+.lightbox-image{width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;transform-origin:center center;will-change:transform}
+.lightbox-nav{position:absolute;z-index:5;bottom:max(10px,env(safe-area-inset-bottom));width:35px;height:35px;display:grid;place-items:center;border-radius:50%;color:#fff;border:1px solid #b6d9ed55;background:linear-gradient(130deg,#0c2633b8,#0d5b7b99);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 2px 10px #0008;font-size:20px;line-height:1;touch-action:manipulation;padding:0}
+.lightbox-nav.prev{left:max(10px,env(safe-area-inset-left))}
+.lightbox-nav.next{right:max(10px,env(safe-area-inset-right))}
+.lightbox-nav:disabled{opacity:.22}
+.lightbox-controls{position:absolute;z-index:5;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px;align-items:center}
+.lightbox-controls button{border:1px solid #aacadd55;color:#fff;background:#092137c9;backdrop-filter:blur(7px);border-radius:9px;font-size:12px;font-weight:700;min-height:30px;padding:3px 9px;touch-action:manipulation}
+.lightbox-count-bubble{position:absolute;z-index:4;left:50%;transform:translateX(-50%);bottom:max(13px,env(safe-area-inset-bottom));border-radius:25px;background:#06172ab0;padding:4px 9px;color:#dce9f1;font-size:11px;pointer-events:none}
+.lightbox-image.zooming{cursor:grab}
+@media(max-width:900px){.lightbox-header,.lightbox-footer,.lightbox-guide{display:none!important}.lightbox-stage{height:100%;padding:0!important}.lightbox-image{max-width:none!important}}
+@media(max-width:900px) and (orientation:landscape){.lightbox{height:100dvh}.lightbox-stage{width:100vw;height:100dvh}.lightbox-image{width:100vw;height:100dvh;object-fit:contain}.lightbox-controls button{font-size:11px;min-height:27px}.lightbox-nav{bottom:max(7px,env(safe-area-inset-bottom));width:32px;height:32px;font-size:18px}.lightbox-count-bubble{bottom:max(9px,env(safe-area-inset-bottom))}}
+@media(hover:hover) and (min-width:901px){.lightbox-nav{width:40px;height:40px;bottom:16px}.lightbox-controls{top:10px;right:12px}}
 </style>
 </head>
 <body id="pageTop">
@@ -50,7 +66,10 @@
 <button class="totop" id="toTop" title="페이지 맨위로" aria-label="맨위로 이동">↑ 맨위</button>
 <div class="lightbox" id="slideLightbox" role="dialog" aria-modal="true" aria-label="확대 슬라이드 뷰어" hidden>
  <div class="lightbox-header"><div class="lightbox-title" id="lightboxTitle"></div><div class="lightbox-counter" id="lightboxCount">01 / 56</div><button type="button" class="lightbox-close" id="lightboxClose" aria-label="확대 보기 닫기">✕ 닫기</button></div>
- <div class="lightbox-stage" id="lightboxStage"><img class="lightbox-image" id="lightboxImage" alt="확대된 슬라이드" draggable="false"></div>
+ <div class="lightbox-stage" id="lightboxStage"><img class="lightbox-image" id="lightboxImage" alt="확대된 슬라이드" draggable="false">
+ <div class="lightbox-controls"><button type="button" id="fitToggle" aria-label="이미지 화면 맞춤 변경">화면 채움</button><button type="button" id="zoomReset" aria-label="확대 초기화">100%</button><button type="button" id="lightboxCloseMini" aria-label="전체화면 닫기">✕</button></div>
+ <button type="button" class="lightbox-nav prev" id="navPrev" aria-label="이전 슬라이드">‹</button><span class="lightbox-count-bubble" id="countBubble">01 / 56</span><button type="button" class="lightbox-nav next" id="navNext" aria-label="다음 슬라이드">›</button>
+ </div>
  <div class="lightbox-guide">화면을 좌우로 밀거나 아래 버튼을 눌러 다음 슬라이드를 볼 수 있습니다.</div>
  <div class="lightbox-footer"><button type="button" class="lightbox-btn" id="lightboxPrev">← 이전 슬라이드</button><button type="button" class="lightbox-btn" id="lightboxNext">다음 슬라이드 →</button></div>
 </div>
@@ -68,6 +87,9 @@ function updateLightbox(){
  $('lightboxCount').textContent=`${fmt(lightboxPage)} / ${fmt(slides.length)}`;
  $('lightboxImage').src=s.image;
  $('lightboxImage').alt=`${lightboxPage}번 확대 슬라이드: ${s.title}`;
+ $('countBubble').textContent=`${fmt(lightboxPage)} / ${fmt(slides.length)}`;
+ $('navPrev').disabled=lightboxPage<=1; $('navNext').disabled=lightboxPage>=slides.length;
+ resetZoom();
  $('lightboxPrev').disabled=lightboxPage<=1;
  $('lightboxNext').disabled=lightboxPage>=slides.length;
  // Preload neighboring slide for smooth swipe navigation.
@@ -105,17 +127,73 @@ document.addEventListener('click',e=>{
 $('lightboxClose').onclick=closeLightbox;
 $('lightboxPrev').onclick=()=>moveLightbox(-1);
 $('lightboxNext').onclick=()=>moveLightbox(1);
-let touchStartX=0,touchStartY=0;
-$('lightboxStage').addEventListener('touchstart',e=>{
- if(e.touches.length!==1)return;
- touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;
+$('navPrev').onclick=()=>moveLightbox(-1); $('navNext').onclick=()=>moveLightbox(1);
+$('lightboxCloseMini').onclick=closeLightbox;
+// Pinch zoom, drag to pan, swipe pages only while image is at 100%.
+let zoomScale=1,zoomX=0,zoomY=0,gesture=null,coverMode=false;
+const stage=$('lightboxStage'), zoomImage=$('lightboxImage');
+function applyZoom(){
+ zoomImage.style.transform=`translate3d(${zoomX}px,${zoomY}px,0) scale(${zoomScale})`;
+ zoomImage.classList.toggle('zooming',zoomScale>1.01);
+ $('zoomReset').textContent=`${Math.round(zoomScale*100)}%`;
+}
+function resetZoom(){zoomScale=1;zoomX=0;zoomY=0;applyZoom();}
+function clampZoom(){
+ const w=stage.clientWidth,h=stage.clientHeight;
+ const boundaryX=w*(zoomScale-1)/2, boundaryY=h*(zoomScale-1)/2;
+ zoomX=Math.max(-boundaryX,Math.min(boundaryX,zoomX));
+ zoomY=Math.max(-boundaryY,Math.min(boundaryY,zoomY));
+}
+function distance(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)}
+function center(a,b){return {x:(a.clientX+b.clientX)/2,y:(a.clientY+b.clientY)/2}}
+stage.addEventListener('touchstart',e=>{
+ if(e.target.closest('button'))return;
+ if(e.touches.length===2){
+  const [a,b]=e.touches;
+  gesture={type:'pinch',distance:distance(a,b),scale:zoomScale,x:zoomX,y:zoomY,center:center(a,b)};
+ } else if(e.touches.length===1){gesture={type:'single',x:e.touches[0].clientX,y:e.touches[0].clientY,moveX:zoomX,moveY:zoomY,wasZoomed:zoomScale>1.01};}
+},{passive:false});
+stage.addEventListener('touchmove',e=>{
+ if(!gesture||e.target.closest('button'))return;
+ if(e.touches.length===2){
+  e.preventDefault();
+  const [a,b]=e.touches;
+  if(gesture.type!=='pinch'){gesture={type:'pinch',distance:distance(a,b),scale:zoomScale,x:zoomX,y:zoomY,center:center(a,b)};}
+  const nextCenter=center(a,b);
+  zoomScale=Math.min(5,Math.max(1,gesture.scale*distance(a,b)/Math.max(1,gesture.distance)));
+  zoomX=gesture.x+(nextCenter.x-gesture.center.x);
+  zoomY=gesture.y+(nextCenter.y-gesture.center.y);
+  if(zoomScale<=1.01){zoomScale=1;zoomX=0;zoomY=0}
+  clampZoom();applyZoom();
+ }else if(e.touches.length===1&&gesture.type==='single'&&gesture.wasZoomed){
+  e.preventDefault();zoomX=gesture.moveX+e.touches[0].clientX-gesture.x;
+  zoomY=gesture.moveY+e.touches[0].clientY-gesture.y;
+  clampZoom();applyZoom();
+ }
+},{passive:false});
+stage.addEventListener('touchend',e=>{
+ if(!gesture)return;
+ if(e.touches.length===1&&gesture.type==='pinch'){
+  gesture={type:'single',x:e.touches[0].clientX,y:e.touches[0].clientY,moveX:zoomX,moveY:zoomY,wasZoomed:true};return;
+ }
+ if(e.touches.length!==0)return;
+ if(gesture.type==='single'&&!gesture.wasZoomed&&zoomScale===1&&e.changedTouches.length){
+  const dx=e.changedTouches[0].clientX-gesture.x,dy=e.changedTouches[0].clientY-gesture.y;
+  if(Math.abs(dx)>48&&Math.abs(dx)>Math.abs(dy)*1.2)moveLightbox(dx<0?1:-1);
+ }
+ if(zoomScale<1.02)resetZoom();
+ gesture=null;
 },{passive:true});
-$('lightboxStage').addEventListener('touchend',e=>{
- if(e.changedTouches.length!==1)return;
- const dx=e.changedTouches[0].clientX-touchStartX;
- const dy=e.changedTouches[0].clientY-touchStartY;
- if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.2)moveLightbox(dx<0?1:-1);
+stage.addEventListener('touchcancel',()=>{gesture=null;},{passive:true});
+let lastTap=0;
+stage.addEventListener('touchend',e=>{
+ if(e.target.closest('button')||e.changedTouches.length!==1)return;
+ const now=Date.now();
+ if(now-lastTap<320){if(zoomScale>1.01)resetZoom();else{zoomScale=2;clampZoom();applyZoom();}lastTap=0;}
+ else lastTap=now;
 },{passive:true});
+$('zoomReset').onclick=resetZoom;
+$('fitToggle').onclick=()=>{coverMode=!coverMode;zoomImage.style.objectFit=coverMode?'cover':'contain';$('fitToggle').textContent=coverMode?'전체 보기':'화면 채움';resetZoom();};
 $('slideLightbox').addEventListener('click',e=>{if(e.target===$('slideLightbox'))closeLightbox()});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setMode(b.dataset.view));$('allBtn').onclick=()=>setMode('all');$('singleBtn').onclick=()=>setMode('single');document.querySelectorAll('.navitem').forEach(b=>b.onclick=()=>{if(mode!=='single')setMode('single',false);goSlide(Number(b.dataset.slide))});['prevTop','prevBottom'].forEach(x=>$(x).onclick=()=>goSlide(current-1));['nextTop','nextBottom'].forEach(x=>$(x).onclick=()=>goSlide(current+1));$('jump').onchange=e=>goSlide(+e.target.value);$('search').oninput=e=>{filter=e.target.value.trim().toLowerCase();if(mode!=='all')setMode('all',false);renderAll()};$('menuButton').onclick=()=>{const on=$('sidebar').classList.toggle('open');$('mask').classList.toggle('on',on);$('menuButton').setAttribute('aria-expanded',String(on))};$('mask').onclick=closeMenu;$('toTop').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});document.querySelectorAll('.brand-home').forEach(link=>link.addEventListener('click',e=>{e.preventDefault();closeMenu();window.scrollTo({top:0,behavior:'smooth'});}));window.addEventListener('keydown',e=>{if(!$('slideLightbox').hidden){if(e.key==='Escape')closeLightbox();else if(e.key==='ArrowRight')moveLightbox(1);else if(e.key==='ArrowLeft')moveLightbox(-1);return;}if(e.target.matches('input,select,textarea'))return;if(e.key==='Escape')closeMenu();if(mode==='single'&&e.key==='ArrowRight')goSlide(current+1);if(mode==='single'&&e.key==='ArrowLeft')goSlide(current-1)});const hash=location.hash.match(/^#(all|single)-(\d+)$/);if(hash){current=Math.max(1,Math.min(56,+hash[2]));setMode(hash[1],false);if(mode==='all')requestAnimationFrame(()=>document.getElementById(`slide-${current}`)?.scrollIntoView())}else renderSingle();
 </script>
